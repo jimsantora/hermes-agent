@@ -1,0 +1,67 @@
+name: Build image
+
+# Builds the Hermes Agent image from this fork and pushes it to GHCR.
+# Trigger by pushing a matching tag, or run it from the Actions tab.
+
+on:
+  push:
+    tags: ['v0.23.0-pr131774*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: hermes-agent
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8
+        with:
+          python-version: '3.14'
+      - name: Install dependencies
+        run: uv sync --locked --python 3.14 --extra all --group dev
+      - name: Discord thread tests
+        run: |
+          uv run --locked python -m pytest \
+            tests/gateway/test_discord_handoff_thread_feed_anchor.py \
+            tests/gateway/test_discord_slash_commands.py \
+            -q -p asyncio
+
+  image:
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v7
+      - name: Work out the image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=sha-
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            HERMES_BOT_DESKTOP=0
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
