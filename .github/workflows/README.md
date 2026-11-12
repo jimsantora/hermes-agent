@@ -621,3 +621,5 @@ coverage:
 - The `push: tags` / `release: published` triggers (`live-providers`,
   `deploy-site` Vercel job) do not fire for tags and
   releases that automation creates with `GITHUB_TOKEN`.
+
+<!-- workflow discovery nudge: fork registry refresh -->
